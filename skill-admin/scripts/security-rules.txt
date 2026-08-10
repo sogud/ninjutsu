@@ -1,0 +1,15 @@
+ignore\s+(all\s+)?(previous|above|prior)\s+(instructions?|prompts?|rules?)	CRITICAL	Prompt injection: ignore previous
+override\s+(your\s+)?system\s+prompt	CRITICAL	Prompt injection: override system
+jailbreak	CRITICAL	Prompt injection: jailbreak
+~\/\.ssh\/	CRITICAL	Permission abuse: SSH key access
+~\/\.aws\/(credentials|config)	CRITICAL	Permission abuse: AWS credentials
+\/etc\/(passwd|shadow|sudoers)	CRITICAL	Permission abuse: system files
+silently\s+\[?do	CRITICAL	Hook: silently execute
+without\s+(informing|telling)\s+the\s+user	CRITICAL	Hook: without user knowledge
+curl\s+-X\s+POST\s+https?://(?!registry\.npmjs\.org)	CRITICAL	Exfiltration: POST to unknown
+webhook\.site\/	CRITICAL	Exfiltration: webhook.site
+Official\s+Anthropic\s+(skill|tool)	CRITICAL	Social: fake official
+rm\s+-rf\s+[^|]*$	CRITICAL	Destructive: rm -rf
+DROP\s+(TABLE|DATABASE)	CRITICAL	Destructive: DROP
+sk-[a-zA-Z0-9]{20,}	CRITICAL	Secret: OpenAI API key
+ghp_[a-zA-Z0-9]{36}	CRITICAL	Secret: GitHub PAT
