@@ -13,6 +13,7 @@ AI Agent 技能管理仓库。
 | [skill-admin](skill-admin/) | 跨 19 个 AI 平台的技能管理工具（CLI + Web UI） |
 | [skill-linter](skill-linter/) | 技能质量检查器 |
 | [terminal-workflow](terminal-workflow/) | 终端工作流与环境维护 |
+| [to-spec](to-spec/) | 把当前对话整理成本地 Markdown Spec，不发布到 Issue Tracker |
 
 ## Export boundaries
 

@@ -18,6 +18,7 @@ research pipelines authored for daily use with pi / Claude Code / Codex / Qoder.
 | `setup-workspace` | Bootstrap a new machine for the agentspace harness: clone repos, symlink global agent configs, tool inventory, doctor |
 | `skill-admin` | Audit and route skills across agent platforms (agents / Claude / others) with a single source of truth |
 | `terminal-workflow` | Terminal toolchain management (Ghostty / Kitty / Zsh / Tmux / Neovim) with config locations and workflows |
+| `to-spec` | Turn agreed requirements into a local Markdown implementation spec without publishing tracker items |
 | `update-workspace-harness` | Evolve the workspace harness from real failure cases: classify gaps (routing / knowledge / action / loop / workflow), update only the single source of truth |
 | `alpha-research` / `beta-research` | Finance research pipelines (fundamentals / event-driven) over public data sources |
 
