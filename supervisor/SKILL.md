@@ -1,9 +1,9 @@
 ---
-name: agent-overseer
-description: 监工模式：把长任务派给 Herdr 另一个窗格的 agent，然后定时巡检、按原则代答问卷、卡住升级、完成后核验交账。用户说"监工""盯一下""监督它做完""激活监工模式""派任务给隔壁 pane 并盯着"时使用。依赖 HERDR_ENV=1 的 Herdr 环境与 subagent schedule。
+name: supervisor
+description: 监工模式：把长任务派给 Herdr 另一个窗格的 agent，然后定期巡检、按原则代答问卷、卡住升级、完成后核验交账。用户说"监工""盯一下""监督它做完""激活监工模式""派任务给隔壁 pane 并盯着"时使用。依赖 HERDR_ENV=1 的 Herdr 环境；其余只靠 herdr CLI，无其他硬依赖。
 ---
 
-# Agent Monitor（监工模式）
+# Supervisor（监工模式）
 
 把一个长任务交给另一个窗格的 agent 执行，主会话不阻塞；定时子 agent 巡检：
 干活不打扰、问卷按原则代答、红线升级给用户、完成必须客观核验后才交账。
@@ -11,8 +11,8 @@ description: 监工模式：把长任务派给 Herdr 另一个窗格的 agent，
 ## 前提
 
 - `test "${HERDR_ENV:-}" = 1` 通过（本会话在 Herdr 内）
-- 有 subagent schedule 能力（pi-subagents）
 - 目标 pane 里是一个可接受 prompt 的 agent（`herdr agent list` 可见）
+- 其余只靠 herdr CLI，无其他硬依赖（pi schedule、看门狗脚本都是可选增强）
 
 ## 流程（五步）
 
@@ -21,8 +21,18 @@ description: 监工模式：把长任务派给 Herdr 另一个窗格的 agent，
 读目标 pane 最近输出（`herdr pane read <id> --lines 40`）确认它当前状态与手头工作，
 避免把新任务撞进它正忙的事情里。
 
+### 1.5 路径决策（可选，但多路径时必做）
+任务存在多条明显不同的实现路线（换架构、选框架、重构 vs 新建等）时，
+先加载 `bestway` 技能做路径决策：建模目标/限制/验收/失败代价，
+对比至少 3 条路径（最优/稳妥/激进），选定后把"选定路线 + 不选其他路线的理由"
+写进任务书的目标与范围——干活 agent 只负责执行选定路线，不在执行中重新选型。
+只有一条显而易见的路线时跳过此步，不仪式化。
+
 ### 2. 写任务书
-路径：`<workspace>/.artifacts/<name>-mission.md`。必须包含：
+位置按任务范围选：单仓任务写进**目标仓自己的** `.artifacts/<name>-mission.md`
+（就近、随仓忽略；任务书是运行态契约，不是产品 spec，不进 docs/ 或 openspec/，
+产出长期决策时在收尾阶段蒸馏进目标仓 docs/）；跨仓或纯 harness 任务才用根
+`<workspace>/.artifacts/`。必须包含：
 - 目标与范围（做什么、**不做什么**）
 - 纪律（典型项：不 git commit/push、每阶段验证方式、改动边界）
 - **客观完成标准**——可机器核验的条目（文件存在、测试 exit 0、git grep 命中、
@@ -34,13 +44,25 @@ description: 监工模式：把长任务派给 Herdr 另一个窗格的 agent，
 （busy 时派发会打断它——先等 idle 或与用户确认接受打断。）
 2-5 秒后 `herdr agent get <PANE_ID>` 确认 agent_status 变为 working。
 
-### 4. 创建监工 schedule
-`subagent schedule.create`：`every` 默认 10m，agent 用 `delegate`，
-task 用下面的巡检指令模板（替换全部占位符）。schedule 名字带任务标识，如 `<name>-monitor`。
+### 4. 巡检：核心只靠 herdr CLI
+
+**默认：主会话每轮对话直接巡一轮**，零额外依赖：
+1. `herdr agent get <name>` 看状态（working/idle/blocked）；
+2. `herdr pane read <pane> --lines 60` 看实况（问卷、报错、水位）；
+3. 跑任务书完成标准里的确定性命令（typecheck/build/test 等）判定进度；
+4. 异常发 `herdr notification show`，并在监控日志追加一行。
+
+**可选增强（需要长时间无人值守时才加，都不是必需）**：
+- herdr pane 循环跑看门狗脚本（`infra/personal/supervisor-watch.sh`，
+  conf 格式见脚本头部注释）：确定性盯状态 + 完成判定 + 通知；
+- pi 会话内可另加 `subagent schedule.create` delegate LLM 巡检（问卷代答用），
+  但创建后必须 `schedule.run` 当场试跑验证（真实事故：曾两小时静默零执行），
+  跑不起来就回到主会话手动巡检。
+非 pi 会话（Codex/Claude Code 等）用前两项即可。
 
 ### 5. 收尾
-监工报 done 后**主会话亲自核验**完成标准（跑测试、查文件、读 pane 总结），
-核验通过才向用户交账；`schedule.pause`（可能复用）或 `schedule.delete`。
+报 done 后**主会话亲自核验**完成标准（跑测试、查文件、读 pane 总结），
+核验通过才向用户交账；清理附加物（若有）：看门狗 conf、schedule。
 核验不通过：把缺口写成新指令派回去，监工继续。
 
 **上下文压缩（按需，不是仪式）**——在派发下一个任务前判断，满足其一才压：
@@ -98,7 +120,11 @@ action=<none|answered|nudged|escalated|done> detail=<≤80字>
 - `ANSWER_POLICY`：简单、最小改动、遵循任务书与项目既有约定、不过度设计
 - `RED_LINES`：删除数据/分支、强推、发布、外部副作用、推翻已确认共识
 - `LOG_PATH`：`<workspace>/.artifacts/<name>-monitor.log`
-- `DONE_CRITERIA`：从任务书的客观完成标准逐条翻译成可执行检查
+- `DONE_CRITERIA`：从任务书的客观完成标准逐条翻译成可执行检查。
+  **防空转**：命令 exit 0 不等于通过，必须要求实质输出——测试命令要核对
+  实际测试文件/用例数（"no test files found" 空转 exit 0 不算通过，
+  测试被搬走时去新位置跑）；build 要核对产物文件存在；文档类标准要抽查
+  内容与事实源一致。
 
 ## 踩坑清单（血泪）
 
@@ -112,6 +138,12 @@ action=<none|answered|nudged|escalated|done> detail=<≤80字>
 5. **busy 时派发=打断**——派发前确认 idle。
 6. 监工指令里写清楚"只操作目标 pane、不自己写业务代码"，
    防止监工越权直接改代码。
+8. **schedule 静默失败**：创建成功 ≠ 会执行。曾出现 schedule 显示已创建、
+   Next 时间正常，但两小时零执行、零通知。创建后必须按第 4 步强制试跑
+   一轮并核对日志；试跑失败就降级手动巡检，绝不留无人值守的空档。
+9. **空转通过**：验收命令 exit 0 可能是假的——测试文件被迁走后 test 命令
+   报 "no test files found" 照样 exit 0。核验时看实质输出（测试数、产物
+   文件、抽查内容），并在任务书阶段就把"防假通过"写进完成标准。
 7. **上下文压缩是按需的，不是仪式**：只有水位 ≥70% 或新旧任务相关性弱时才压；
    判断时机是派发下一任务前（那时才知道相关性），不是 done 的瞬间；
    严禁任务中途压缩。
