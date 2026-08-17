@@ -52,6 +52,12 @@ description: 监工模式：把长任务派给 Herdr 另一个窗格的 agent，
 3. 跑任务书完成标准里的确定性命令（typecheck/build/test 等）判定进度；
 4. 异常发 `herdr notification show`，并在监控日志追加一行。
 
+**部署后必须验证通知渠道（真实事故：herdr notification 返回 disabled，
+看门狗其实已判定两个 agent 完成，但通知静默丢失，用户以为没人盯）**：
+派发后立刻 `herdr notification show 测试 --body 链路检查`，读返回 JSON 的
+`result.shown`；为 false 就改用系统通知（macOS osascript，看门狗脚本已内置
+降级），并明确告知用户通知走系统通知中心。
+
 **可选增强（需要长时间无人值守时才加，都不是必需）**：
 - herdr pane 循环跑看门狗脚本（`infra/personal/supervisor-watch.sh`，
   conf 格式见脚本头部注释）：确定性盯状态 + 完成判定 + 通知；
@@ -144,6 +150,11 @@ action=<none|answered|nudged|escalated|done> detail=<≤80字>
 9. **空转通过**：验收命令 exit 0 可能是假的——测试文件被迁走后 test 命令
    报 "no test files found" 照样 exit 0。核验时看实质输出（测试数、产物
    文件、抽查内容），并在任务书阶段就把"防假通过"写进完成标准。
+10. **通知静默失效**：`herdr notification show` exit 0 不等于送达，返回 JSON
+    里 `shown:false, reason:disabled` 才是真相。曾发生两个 agent 都已完成、
+    done 通知全部丢失、用户两小时没收到任何提醒。部署后必须发测试通知验证
+    `result.shown`；看门狗脚本已内置 osascript 降级，通知全失败时会在日志写
+    `action=notify-failed`，巡检时见到该标记要直接读 pane 实况。
 7. **上下文压缩是按需的，不是仪式**：只有水位 ≥70% 或新旧任务相关性弱时才压；
    判断时机是派发下一任务前（那时才知道相关性），不是 done 的瞬间；
    严禁任务中途压缩。
