@@ -1,0 +1,4 @@
+interface:
+  display_name: "Update Workspace Harness"
+  short_description: "以正确性和端到端效率改进工作区 Harness"
+  default_prompt: "Use $update-harness to compare the current and proposed workflow, then update only when correctness is preserved and the complete task improves."

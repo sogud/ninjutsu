@@ -1,5 +1,5 @@
 ---
-name: update-workspace-harness
+name: update-harness
 description: 收集已确认的可复用知识，并持续改进任意工作区的 Agent Harness。用于用户要求记住、保存或同步长期规则、文档、技能路由、脚本、验证、失败处理、Loop、Workflow、Review 或 Hook，或纠正可复用的边界、契约和仓库职责时。先分类缺口、追踪完整路径并比较整体收益；没有不降低正确性的明确收益时不更新。不要因普通任务结束自动触发。
 disable-model-invocation: true
 ---
