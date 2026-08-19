@@ -14,6 +14,7 @@ AI Agent 技能管理仓库。
 | [skill-linter](skill-linter/) | 技能质量检查器 |
 | [terminal-workflow](terminal-workflow/) | 终端工作流与环境维护 |
 | [to-spec](to-spec/) | 把当前对话整理成本地 Markdown Spec，不发布到 Issue Tracker |
+| [codebase-render](codebase-render/) | 单文件代码库讲解：认知模型、目录结构、注释伪代码、全链路与失败场景；支持增量同步 |
 
 ## Export boundaries
 
