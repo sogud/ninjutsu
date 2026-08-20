@@ -39,32 +39,42 @@ description: 监工模式：把长任务派给 Herdr 另一个窗格的 agent，
   关键数字），绝不写"agent 自述完成"这类主观标准
 - 要求结束时输出总结：做了什么、验证结果、剩余风险
 
-### 3. 派发
-目标 idle 时：`herdr agent prompt <PANE_ID> "读取 <任务书路径> 并严格执行……全部完成前不要停。"`
+### 3. 派发（含报告契约）
+派发前先 `intercom list` 确认主会话自己的名字/ID。派发 prompt 除了"读取任务书
+并严格执行"，必须带上**报告契约**：
+
+> 任务书收到后先用 intercom 向主会话 `<主会话名/ID>` 回一句确认；
+> 完成、卡住、或需要决策时，先用 intercom 向主会话发简报（完成时附验证结果），
+> 再做其他事。禁止弹 OS 通知、弹窗、声音——报告只发给 agent，不打扰人。
+
 （busy 时派发会打断它——先等 idle 或与用户确认接受打断。）
 2-5 秒后 `herdr agent get <PANE_ID>` 确认 agent_status 变为 working。
 
-### 4. 巡检：核心只靠 herdr CLI
+**部署验证 = 等 worker 的 intercom 确认到达**。这是唯一可验证的通知渠道：
+收到就是收到，收不到就是没送达（OS 通知恰恰相反，exit 0 也可能什么都没发生）。
+几分钟没收到确认 → `herdr pane read` 看 worker 实况，必要时重发报告契约。
 
-**默认：主会话每轮对话直接巡一轮**，零额外依赖：
+### 4. 巡检：报告靠 intercom，巡检靠 herdr CLI
+
+**主通道（被动接收）**：worker 按报告契约用 intercom 自报完成/卡住。
+主会话收到即触发核验，不用定时打扰。
+
+**主动巡检（主会话每轮对话顺手一轮，或收到用户询问时）**：
 1. `herdr agent get <name>` 看状态（working/idle/blocked）；
 2. `herdr pane read <pane> --lines 60` 看实况（问卷、报错、水位）；
-3. 跑任务书完成标准里的确定性命令（typecheck/build/test 等）判定进度；
-4. 异常发 `herdr notification show`，并在监控日志追加一行。
+3. 跑任务书完成标准里的确定性命令（typecheck/build/test 等）判定进度。
 
-**部署后必须验证通知渠道（真实事故：herdr notification 返回 disabled，
-看门狗其实已判定两个 agent 完成，但通知静默丢失，用户以为没人盯）**：
-派发后立刻 `herdr notification show 测试 --body 链路检查`，读返回 JSON 的
-`result.shown`；为 false 就改用系统通知（macOS osascript，看门狗脚本已内置
-降级），并明确告知用户通知走系统通知中心。
+**看门狗 deadman（可选，长时间无人值守才加）**：herdr pane 循环跑
+`system/infra/personal/supervisor-watch.sh`（conf 在 `.artifacts/supervisor-watch/`，
+格式见脚本头部注释）。它只做确定性兜底：worker 死了/忘了自报时记录 idle 卡死。
+它的通知只走 herdr（尽力而为，本机 disabled 也无妨），**绝不弹 OS 弹窗/声音**，
+一切写监控日志，主会话巡检时看日志。
 
-**可选增强（需要长时间无人值守时才加，都不是必需）**：
-- herdr pane 循环跑看门狗脚本（`infra/personal/supervisor-watch.sh`，
-  conf 格式见脚本头部注释）：确定性盯状态 + 完成判定 + 通知；
-- pi 会话内可另加 `subagent schedule.create` delegate LLM 巡检（问卷代答用），
-  但创建后必须 `schedule.run` 当场试跑验证（真实事故：曾两小时静默零执行），
-  跑不起来就回到主会话手动巡检。
-非 pi 会话（Codex/Claude Code 等）用前两项即可。
+**pi schedule LLM 巡检（可选）**：问卷代答场景可用 `subagent schedule.create`，
+但创建后必须 `schedule.run` 当场试跑验证（真实事故：曾两小时静默零执行）。
+
+红线：任何通知都不打扰人类用户——报告发给 agent（intercom/herdr），
+人类想看进展时自然会问。
 
 ### 5. 收尾
 报 done 后**主会话亲自核验**完成标准（跑测试、查文件、读 pane 总结），
@@ -154,11 +164,15 @@ action=<none|answered|nudged|escalated|done> detail=<≤80字>
 9. **空转通过**：验收命令 exit 0 可能是假的——测试文件被迁走后 test 命令
    报 "no test files found" 照样 exit 0。核验时看实质输出（测试数、产物
    文件、抽查内容），并在任务书阶段就把"防假通过"写进完成标准。
-10. **通知静默失效**：`herdr notification show` exit 0 不等于送达，返回 JSON
-    里 `shown:false, reason:disabled` 才是真相。曾发生两个 agent 都已完成、
-    done 通知全部丢失、用户两小时没收到任何提醒。部署后必须发测试通知验证
-    `result.shown`；看门狗脚本已内置 osascript 降级，通知全失败时会在日志写
-    `action=notify-failed`，巡检时见到该标记要直接读 pane 实况。
+10. **报告通道三次踩坑后的结论：只走 intercom（agent↔agent）**。
+    第一次：herdr notification 本机 disabled，done 通知全部静默丢失，用户两小时
+    没收到提醒；第二次：降级 osascript 系统通知，exit 0 但什么都没弹（exit 0 ≠
+    可见）；第三次：测试弹窗直接打扰了用户——**通知人类本身就是错的方向**。
+    正解：worker 按报告契约用 intercom 直接向主会话自报完成/卡住，主会话被动
+    接收即触发核验——intercom 是唯一可验证的通道（收到就是收到）。看门狗降级
+    为 deadman，通知只走 herdr（尽力而为），绝不弹 OS 弹窗/声音；它的一切
+    判定写监控日志，主会话巡检时看日志。`action=notify-failed` 标记不再重要——
+    真正的完成信号来自 worker 的 intercom 自报。
 11. **CHECK_CMD 基线绿误报**：只跑测试的 CHECK_CMD 在派发瞬间就会通过
     （仓库开工前就是绿的），看门狗 6 秒误报 done、之后永远不再提醒。
     CHECK_CMD 必须含"功能存在性"检查（git grep 新代码特征/新文件存在），
